@@ -1,4 +1,7 @@
 # Byte-compiled / optimized / DLL files
+Scripts/mae_cifar10_final.pth
+Scripts/comparison_result.png
+Scripts/data
 __pycache__/
 *.py[codz]
 *$py.class
