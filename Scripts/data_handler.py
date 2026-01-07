@@ -1,50 +1,72 @@
 import torch
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
+import numpy as np
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, SubsetRandomSampler
 from config import Config
 
-def get_dataloaders():
-    """
-    Downloads CIFAR-10 and prepares DataLoaders.
-    INCLUDES DATA AUGMENTATION for the Training set.
-    """
-    print(f"Preparing Data on {Config.DEVICE}...")
-    means = (0.4914, 0.4822, 0.4465)
-    stds = (0.2023, 0.1994, 0.2010)
-    # --- TRAINING TRANSFORM (With Augmentation) ---
-    # RandomCrop: Jitters the image slightly so the model sees different framing
-    # HorizontalFlip: Doubles the effective dataset size
+def get_data_loaders():
+    # Tried to use data augmentation but it did not lead to any benefit
     train_transform = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
+        #transforms.RandomHorizontalFlip(p=0.5),
+        #transforms.RandomRotation(degrees=10),
+        #transforms.RandomAffine(0, translate=(0.1, 0.1)),
         transforms.ToTensor(),
-        transforms.Normalize(means,stds)
     ])
 
-    # --- TESTING TRANSFORM (No Augmentation) ---
-    # We want to evaluate on the "real" images, not the jittered ones
+    #Clean transform for val/test
     test_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), 
-                             (0.2023, 0.1994, 0.2010)),
     ])
 
-    # Download Training Data
-    trainset = torchvision.datasets.CIFAR10(
-        root=Config.DATA_PATH, train=True, download=True, transform=train_transform)
-    
-    trainloader = DataLoader(
-        trainset, batch_size=Config.BATCH_SIZE, shuffle=True, 
-        num_workers=Config.NUM_WORKERS, pin_memory=True)
+    # Load training with augmentation
+    train_dataset_aug = datasets.CIFAR10(
+        root='./data', 
+        train=True, 
+        transform=train_transform, 
+        download=True
+    )
 
-    # Download Test Data
-    testset = torchvision.datasets.CIFAR10(
-        root=Config.DATA_PATH, train=False, download=True, transform=test_transform)
-    
-    testloader = DataLoader(
-        testset, batch_size=Config.BATCH_SIZE, shuffle=False, 
-        num_workers=Config.NUM_WORKERS, pin_memory=True)
+    # Load training for validation
+    train_dataset_clean = datasets.CIFAR10(
+        root='./data', 
+        train=True, 
+        transform=test_transform, 
+        download=True
+    )
 
-    print(f"Data Loaded: {len(trainset)} Training Images (Augmented), {len(testset)} Test Images")
-    return trainloader, testloader
+    # Load test
+    test_dataset = datasets.CIFAR10(
+        root='./data', 
+        train=False, 
+        transform=test_transform, 
+        download=True
+    )
+
+    num_train = len(train_dataset_aug)
+    indices = list(range(num_train))
+    split = int(np.floor(Config.VALIDATION_SPLIT * num_train))
+
+    np.random.shuffle(indices)
+
+    train_idx, val_idx = indices[split:], indices[:split]
+
+    # Loaders
+    train_loader = DataLoader(
+        train_dataset_aug, 
+        batch_size=Config.BATCH_SIZE, 
+        sampler=SubsetRandomSampler(train_idx)
+    )
+    
+    val_loader = DataLoader(
+        train_dataset_clean, 
+        batch_size=Config.BATCH_SIZE, 
+        sampler=SubsetRandomSampler(val_idx)
+    )
+
+    test_loader = DataLoader(
+        test_dataset, 
+        batch_size=Config.BATCH_SIZE, 
+        shuffle=False
+    )
+
+    return train_loader, val_loader, test_loader
